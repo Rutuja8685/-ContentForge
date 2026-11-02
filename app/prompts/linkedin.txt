@@ -14,6 +14,7 @@ the source; do not invent, infer, or add factual claims.
 
 Return the post in the required structured format. Make the hook engaging,
 write a coherent body, provide relevant hashtags, and include a suitable call
-to action without introducing unsupported facts.
+to action without introducing unsupported facts. Write every human-readable
+field value in {language}; keep the structured field names in English.
 
 {format_instructions}

@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     # ── Google Gemini ────────────────────────────────────────────────────────
     gemini_api_key: str = Field(default="", validation_alias="GEMINI_API_KEY")
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = Field(default="", validation_alias="GEMINI_MODEL")
 
     # ── Database ─────────────────────────────────────────────────────────────
     database_url: str = "sqlite:///./contentforge.db"
