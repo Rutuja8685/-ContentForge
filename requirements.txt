@@ -1,0 +1,45 @@
+# ContentForge – requirements.txt
+# Versions chosen for Python 3.13 (pre-built wheels, no compiler needed)
+
+# ── Web framework ────────────────────────────────────────────────────────────
+fastapi==0.115.6
+uvicorn[standard]==0.30.1
+python-multipart==0.0.9
+
+# ── Pydantic (2.10+ has cp313 wheels) ───────────────────────────────────────
+pydantic==2.10.6
+pydantic-settings==2.7.1
+
+# ── Database ─────────────────────────────────────────────────────────────────
+sqlalchemy>=2.0.36
+python-dotenv==1.0.1
+
+# ── Auth ─────────────────────────────────────────────────────────────────────
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+
+# ── LLM ─────────────────────────────────────────────────────────────────────
+# langchain 0.3.x + langchain-core 0.3.x work with langchain-google-genai 2.x
+langchain>=0.3.0,<0.4.0
+langchain-core>=0.3.0,<0.4.0
+langchain-google-genai>=2.0.0,<3.0.0
+
+# ── File parsing ──────────────────────────────────────────────────────────────
+pypdf==4.2.0
+python-docx==1.1.2
+beautifulsoup4==4.12.3
+requests==2.32.3
+
+# ── Export ────────────────────────────────────────────────────────────────────
+python-pptx==0.6.23
+reportlab==4.2.2
+
+# ── Frontend (1.40+ allows numpy>=2 which has cp313 wheels) ──────────────────
+streamlit>=1.40.0
+
+# ── Development ───────────────────────────────────────────────────────────────
+pytest==8.2.2
+pytest-asyncio==0.23.8
+httpx==0.27.0
+
