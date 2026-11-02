@@ -10,6 +10,7 @@ from frontend.share_links import (
 )
 
 API_URL = "http://localhost:8000/generate"
+EXTRACT_URL = "http://localhost:8000/upload/extract"
 OUTPUT_TYPES = [
     "LinkedIn Post",
     "Twitter/X",
@@ -180,11 +181,64 @@ def _request_generation(payload: dict) -> dict | None:
     return None
 
 
+def _extract_source(file=None, url: str | None = None) -> dict | None:
+    try:
+        if file is not None:
+            response = requests.post(
+                EXTRACT_URL,
+                files={
+                    "file": (
+                        file.name,
+                        file.getvalue(),
+                        file.type or "application/octet-stream",
+                    )
+                },
+                timeout=90,
+            )
+        else:
+            response = requests.post(
+                EXTRACT_URL,
+                data={"url": url},
+                timeout=20,
+            )
+        response.raise_for_status()
+        return response.json()
+    except requests.ConnectionError:
+        st.error("ContentForge could not reach the backend. Start FastAPI and retry.")
+    except requests.Timeout:
+        st.error("Source extraction timed out. Please try again.")
+    except requests.HTTPError as error:
+        try:
+            detail = error.response.json().get("detail", "")
+        except ValueError:
+            detail = ""
+        st.error(detail or "The source could not be extracted. Check the input and retry.")
+    except requests.RequestException:
+        st.error("Source extraction failed. Please try again.")
+    except ValueError:
+        st.error("The backend returned an unreadable extraction response.")
+    return None
+
+
 def _save_edited_content(output_type: str) -> None:
     edit_key = f"edit_{output_type}"
     st.session_state[f"saved_edited_content_{output_type}"] = st.session_state[
         edit_key
     ]
+
+
+def _clear_source_metadata() -> None:
+    st.session_state.pop("source_metadata", None)
+
+
+def _clear_output_edit_state() -> None:
+    for key in list(st.session_state):
+        if (
+            key.startswith("edit_")
+            or key.startswith("tweet_")
+            or key.startswith("saved_edited_content_")
+        ):
+            st.session_state.pop(key, None)
 
 
 st.set_page_config(
@@ -196,14 +250,94 @@ st.set_page_config(
 st.title("⚡ ContentForge")
 st.subheader("Transform source material into polished content")
 
-with st.form("generate_form"):
-    source_text = st.text_area(
+for pending_name, state_name in (
+    ("pending_source_text", "source_text"),
+    ("pending_source_metadata", "source_metadata"),
+):
+    if pending_name in st.session_state:
+        st.session_state[state_name] = st.session_state.pop(pending_name)
+
+paste_tab, file_tab, url_tab, image_tab = st.tabs(
+    ["Paste text", "Upload file", "From URL", "Image"]
+)
+with paste_tab:
+    st.text_area(
         "Source text",
         max_chars=20_000,
         height=220,
-        help="Use only material you want transformed into content.",
+        help="Paste text here or review and edit extracted content.",
         key="source_text",
+        on_change=_clear_source_metadata,
     )
+with file_tab:
+    uploaded_file = st.file_uploader(
+        "Choose a PDF, DOCX, TXT, or MD file",
+        type=["pdf", "docx", "txt", "md"],
+        key="document_upload",
+    )
+    if st.button(
+        "Extract file text",
+        key="extract_document",
+        disabled=uploaded_file is None,
+    ):
+        with st.spinner("Extracting text from the file..."):
+            extraction = _extract_source(file=uploaded_file)
+        if extraction is not None:
+            st.session_state["pending_source_text"] = extraction["text"]
+            st.session_state["pending_source_metadata"] = extraction
+            st.rerun()
+with url_tab:
+    source_url = st.text_input(
+        "Public web URL",
+        placeholder="https://example.com/article",
+        key="source_url",
+    )
+    if st.button(
+        "Extract URL text",
+        key="extract_url",
+        disabled=not source_url.strip(),
+    ):
+        with st.spinner("Fetching and extracting the web page..."):
+            extraction = _extract_source(url=source_url.strip())
+        if extraction is not None:
+            st.session_state["pending_source_text"] = extraction["text"]
+            st.session_state["pending_source_metadata"] = extraction
+            st.rerun()
+with image_tab:
+    uploaded_image = st.file_uploader(
+        "Choose a PNG, JPG, or WEBP image",
+        type=["png", "jpg", "jpeg", "webp"],
+        key="image_upload",
+    )
+    if st.button(
+        "Describe image and extract visible text",
+        key="extract_image",
+        disabled=uploaded_image is None,
+    ):
+        with st.spinner("Analyzing the image..."):
+            extraction = _extract_source(file=uploaded_image)
+        if extraction is not None:
+            st.session_state["pending_source_text"] = extraction["text"]
+            st.session_state["pending_source_metadata"] = extraction
+            st.rerun()
+
+source_metadata = st.session_state.get("source_metadata")
+source_text_value = st.session_state.get("source_text", "")
+if source_text_value:
+    st.caption(
+        f"Source: {source_metadata['source_type'] if source_metadata else 'text'} "
+        f"· {len(source_text_value):,} characters"
+    )
+    if source_metadata and source_metadata["truncated"]:
+        st.warning(
+            "Extracted text was truncated to 20,000 characters. Review it before generating."
+        )
+    if source_metadata:
+        for warning in source_metadata.get("warnings", []):
+            st.warning(warning)
+
+with st.form("generate_form"):
+    source_text = st.session_state.get("source_text", "")
     selected_outputs = st.multiselect(
         "Output types",
         options=OUTPUT_TYPES,
@@ -285,8 +419,12 @@ if submitted:
         with st.spinner("Generating your content..."):
             data = _request_generation(payload)
         if data is not None:
+            _clear_output_edit_state()
             st.session_state["generation_results"] = data.get("results", {})
             st.session_state["generation_errors"] = data.get("errors", {})
+            st.session_state["generation_warnings"] = data.get("warnings", [])
+            for warning in st.session_state["generation_warnings"]:
+                st.warning(warning)
             for output_type in payload["output_types"]:
                 result = st.session_state["generation_results"].get(output_type)
                 if result is not None:

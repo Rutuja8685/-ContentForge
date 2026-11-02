@@ -21,3 +21,15 @@ class GenerateResponse(BaseModel):
 
     results: dict[str, dict | None]
     errors: dict[str, str]
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ExtractResponse(BaseModel):
+    """Extracted source text and diagnostics returned by /upload/extract."""
+
+    text: str
+    source_type: str
+    filename_or_url: str
+    char_count: int
+    truncated: bool
+    warnings: list[str] = Field(default_factory=list)

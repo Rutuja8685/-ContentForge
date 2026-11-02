@@ -7,6 +7,10 @@ from fastapi import APIRouter
 
 from app.config import get_settings
 from app.schemas.generate import GenerateRequest, GenerateResponse
+from app.services.security_service import (
+    neutralize_source_delimiters,
+    scan_for_injection,
+)
 from app.services.llm_service import generate_output, is_rate_limit_error
 
 logger = logging.getLogger(__name__)
@@ -53,6 +57,8 @@ async def _generate_one(
 @router.post("", response_model=GenerateResponse)
 async def generate(request: GenerateRequest):
     """Generate each requested output independently."""
+    warnings = scan_for_injection(request.source_text)
+    request.source_text = neutralize_source_delimiters(request.source_text)
     logger.info("Generation requested for output types: %s", request.output_types)
     semaphore = asyncio.Semaphore(2)
     outcomes = await asyncio.gather(
@@ -67,4 +73,4 @@ async def generate(request: GenerateRequest):
         for output_type, _, error in outcomes
         if error is not None
     }
-    return GenerateResponse(results=results, errors=errors)
+    return GenerateResponse(results=results, errors=errors, warnings=warnings)

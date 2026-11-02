@@ -158,3 +158,45 @@ def test_failed_regeneration_keeps_existing_result_and_user_edit(monkeypatch):
     )
     assert any("Gemini is busy" in error.value for error in app.error)
     assert not app.exception
+
+
+def test_new_generate_replaces_twitter_editor_content(monkeypatch):
+    generations = []
+
+    def fake_post(_url, json, timeout):
+        generations.append(dict(json))
+        results = _sample_results()
+        if len(generations) == 2:
+            results["LinkedIn Post"]["hook"] = "Generation B LinkedIn hook"
+            results["Twitter/X"]["tweets"] = ["New generation B tweet"]
+            results["Advisory"]["title"] = "Generation B advisory"
+            results["Executive Summary"]["headline"] = (
+                "Generation B executive headline"
+            )
+        return _Response({"results": results, "errors": {}})
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    app = AppTest.from_file(
+        "frontend/streamlit_app.py", default_timeout=30
+    ).run()
+
+    app.text_area(key="source_text").set_value("Source A")
+    app.button(key="FormSubmitter:generate_form-Generate").click().run()
+    app.text_area(key="source_text").set_value("Source B")
+    app.button(key="FormSubmitter:generate_form-Generate").click().run()
+
+    assert len(generations) == 2
+    assert generations[1]["source_text"] == "Source B"
+    assert (
+        app.session_state["generation_results"]["Twitter/X"]["tweets"]
+        == ["New generation B tweet"]
+    )
+    assert app.text_area(key="edit_Twitter/X_1").value == "New generation B tweet"
+    assert app.text_area(key="edit_LinkedIn Post").value.startswith(
+        "Generation B LinkedIn hook"
+    )
+    assert "Generation B advisory" in app.text_area(key="edit_Advisory").value
+    assert "Generation B executive headline" in app.text_area(
+        key="edit_Executive Summary"
+    ).value
+    assert not app.exception
